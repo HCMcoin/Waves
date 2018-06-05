@@ -27,6 +27,7 @@ object Parser {
   private val unicodeSymbolP = P("\\u" ~/ Pass ~~ (char | digit).repX(min = 0, max = 4))
   private val notEndOfString = CharPred(_ != '\"')
   private val specialSymbols = P("\\" ~~ notEndOfString.?)
+  private val comment        = P("#" ~~ CharPred(_ != '\n').repX)
 
   private val escapedUnicodeSymbolP: P[(Int, String, Int)] = P(Index ~~ (NoCut(unicodeSymbolP) | specialSymbols).! ~~ Index)
   private val stringP: P[EXPR] = P(Index ~~ "\"" ~/ Pass ~~ (escapedUnicodeSymbolP | notEndOfString).!.repX ~~ "\"" ~~ Index)
@@ -198,7 +199,7 @@ object Parser {
           val innerEnd   = end - 1
           decoded match {
             case Left(err) => CONST_BYTEVECTOR(start, end, PART.INVALID(innerStart, innerEnd, err))
-            case Right(r) => CONST_BYTEVECTOR(start, end, PART.VALID(innerStart, innerEnd, ByteVector(r)))
+            case Right(r)  => CONST_BYTEVECTOR(start, end, PART.VALID(innerStart, innerEnd, ByteVector(r)))
           }
       }
 
@@ -228,7 +229,10 @@ object Parser {
       }
   }
 
-  private val baseAtom      = P(ifP | NoCut(matchP) | byteVectorP | stringP | numberP | trueP | falseP | block | maybeAccessP)
+  private val baseAtom = comment.rep() ~
+    P(ifP | NoCut(matchP) | byteVectorP | stringP | numberP | trueP | falseP | block | maybeAccessP) ~
+    comment.rep()
+
   private lazy val baseExpr = P(binaryOp(baseAtom, opsByPriority) | baseAtom)
 
   private lazy val fallBackExpr = {
